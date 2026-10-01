@@ -11,5 +11,18 @@ export async function requireRole(roles: Array<'STUDENT' | 'TEACHER' | 'SCHOOL_A
 export function safeEqualOrigin(request: Request) {
   const origin = request.headers.get('origin');
   if (!origin) return true;
-  try { return new URL(origin).host === new URL(request.url).host; } catch { return false; }
+  try {
+    const originHost = new URL(origin).host;
+    // リバースプロキシ環境（Cloudflare Tunnelなど）では
+    // 'x-forwarded-host' に本来のホスト名が含まれるため、それを優先して確認する
+    const forwardedHost = request.headers.get('x-forwarded-host');
+    const hostHeader = request.headers.get('host');
+    
+    // プロキシのホスト名、もしくは直接のHostヘッダー、最後にURLのホストと比較
+    const requestHost = forwardedHost || hostHeader || new URL(request.url).host;
+    
+    return originHost === requestHost;
+  } catch {
+    return false;
+  }
 }
