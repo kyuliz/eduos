@@ -1,0 +1,203 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  TEACHER
+  SCHOOL_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+  GRADUATED
+  TRANSFERRED
+}
+
+model School {
+  id           String   @id @default(cuid())
+  name         String
+  schoolType   String
+  timezone     String   @default("Asia/Tokyo")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  years        AcademicYear[]
+  divisions    Division[]
+  users        User[]
+  grades        Grade[]
+  classes       Class[]
+  enrollments   Enrollment[]
+  auditLogs     AuditLog[]
+}
+
+model AcademicYear {
+  id        String   @id @default(cuid())
+  schoolId  String
+  name      String
+  startsAt  DateTime
+  endsAt    DateTime
+  isCurrent Boolean  @default(false)
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  terms     Term[]
+  grades    Grade[]
+  classes   Class[]
+  enrollments Enrollment[]
+  @@unique([schoolId, name])
+  @@index([schoolId, isCurrent])
+}
+
+model Term {
+  id            String @id @default(cuid())
+  academicYearId String
+  name          String
+  startsAt      DateTime
+  endsAt        DateTime
+  academicYear  AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  @@unique([academicYearId, name])
+}
+
+model Division {
+  id       String @id @default(cuid())
+  schoolId String
+  name     String
+  sortOrder Int @default(0)
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  grades   Grade[]
+  @@unique([schoolId, name])
+  @@index([schoolId, sortOrder])
+}
+
+model Grade {
+  id             String @id @default(cuid())
+  schoolId       String
+  divisionId     String?
+  academicYearId String
+  name           String
+  sortOrder      Int @default(0)
+  school         School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  division       Division? @relation(fields: [divisionId], references: [id], onDelete: SetNull)
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  classes        Class[]
+  enrollments    Enrollment[]
+  @@unique([schoolId, academicYearId, name])
+  @@index([schoolId, academicYearId, sortOrder])
+}
+
+model Class {
+  id             String @id @default(cuid())
+  schoolId       String
+  academicYearId String
+  gradeId        String
+  name           String
+  homeroomTeacherId String?
+  school         School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  grade          Grade @relation(fields: [gradeId], references: [id], onDelete: Cascade)
+  homeroomTeacher User? @relation("HomeroomTeacher", fields: [homeroomTeacherId], references: [id], onDelete: SetNull)
+  enrollments    Enrollment[]
+  teachingAssignments TeachingAssignment[]
+  @@unique([schoolId, academicYearId, gradeId, name])
+  @@index([schoolId, academicYearId, gradeId])
+}
+
+model User {
+  id                 String @id @default(cuid())
+  schoolId           String
+  role               Role
+  status             UserStatus @default(ACTIVE)
+  loginId            String
+  passwordHash       String
+  name               String
+  studentNumber      String?
+  profileImageUrl    String?
+  introduction       String?
+  interests          String @default("[]")
+  strengths          String @default("[]")
+  learningGoals      String?
+  futureAspiration   String?
+  passwordChangedAt DateTime @default(now())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  school             School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  enrollments        Enrollment[]
+  sessions            Session[]
+  teacherAssignments TeachingAssignment[]
+  homeroomClasses    Class[] @relation("HomeroomTeacher")
+  authoredAudits     AuditLog[]
+  @@unique([schoolId, loginId])
+  @@unique([schoolId, studentNumber])
+  @@index([schoolId, role, status, name])
+}
+
+model Enrollment {
+  id             String @id @default(cuid())
+  schoolId       String
+  studentId      String
+  academicYearId String
+  gradeId        String
+  classId        String
+  rollNumber     Int?
+  startsAt       DateTime
+  endsAt         DateTime?
+  student        User @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  school         School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  grade          Grade @relation(fields: [gradeId], references: [id], onDelete: Restrict)
+  class          Class @relation(fields: [classId], references: [id], onDelete: Restrict)
+  @@unique([studentId, academicYearId])
+  @@unique([classId, rollNumber])
+  @@index([schoolId, academicYearId, gradeId, classId])
+}
+
+model TeachingAssignment {
+  id        String @id @default(cuid())
+  teacherId String
+  classId   String
+  subject   String?
+  teacher   User @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  class     Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  @@unique([teacherId, classId, subject])
+  @@index([teacherId, classId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  schoolId  String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, expiresAt])
+  @@index([schoolId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  @@index([userId, expiresAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  schoolId   String
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  school     School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  actor      User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  @@index([schoolId, createdAt])
+}
